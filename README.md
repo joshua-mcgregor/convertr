@@ -108,3 +108,7 @@ As this was a simple use case, I decided to simply use python scripts. If this w
 
 There's a lot to go after in a full CICD pipeline. Different environments, different behaviours for different branches. One thing that would be good would be to enable testing on branches. This would give reassurance prior to a merge that your PR is behaving as expected.
 
+### VPC Config
+
+Currently there are no NACL rules set up for the subnet. As this is only a lambda, it cannot be directly accessed through the internet regardless. If there were other resources we needed to protect, NACL rules restricting traffic from outside the VPC would be advisable. API Gateway is already public facing so isn't impacted by either SGs or NACL rules.
+
