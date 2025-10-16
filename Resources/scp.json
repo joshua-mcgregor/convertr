@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyIAMRoleActionsExceptTrusted",
+      "Effect": "Deny",
+      "NotAction": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "ec2:CreateNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DeleteNetworkInterface",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:iam::278309669918:role/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalType": "Role"
+        },
+        "StringNotEquals": {
+          "aws:PrincipalArn": "arn:aws:iam::278309669918:role/iam-convertr-github"
+        }
+      }
+    }
+  ]
+}

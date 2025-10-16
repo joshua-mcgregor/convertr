@@ -1,0 +1,111 @@
+name: Terraform Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+
+jobs:
+  terraform:
+    name: Deploy Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v5
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Install Poetry & Plugin
+      run: |
+        python -m pip install --upgrade pip
+        pip install poetry
+        poetry self add poetry-plugin-export
+
+    - name: Install Test Dependencies
+      working-directory: ./lambda
+      run: poetry install
+
+    - name: Run Unit Tests
+      working-directory: ./lambda
+      run: poetry run pytest tests/unit/
+
+    - name: Install Production Dependencies
+      working-directory: ./lambda
+      run: |
+        poetry export --without-hashes --without dev -f requirements.txt -o requirements.txt
+        pip install -r requirements.txt -t /tmp/dist
+
+    - name: Copy Lambda Code
+      working-directory: ./lambda
+      run: cp -r src/* /tmp/dist/ -v
+
+    - name: Bundle Lambda
+      working-directory: /tmp/dist
+      run: zip -r ./lambda.zip .
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v5.1.0
+      with:
+        role-to-assume: arn:aws:iam::278309669918:role/iam-convertr-github
+        role-session-name: githubsession
+        aws-region: eu-west-2
+
+    - name: Set GIT_COMMIT Variable
+      run: echo "GIT_COMMIT=${GITHUB_SHA}" >> $GITHUB_ENV
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.13.4
+
+    - name: Terraform Init
+      working-directory: terraform
+      run: terraform init
+
+    - name: Terraform Format
+      working-directory: terraform
+      run: terraform fmt -check
+
+    - name: Terraform Validate
+      working-directory: terraform
+      run: terraform validate
+
+    - name: Terraform Apply
+      working-directory: terraform
+      run: |
+        terraform apply -auto-approve -var "git_commit=${{ env.GIT_COMMIT }}" -var "test_user_password=${{ secrets.COGNITO_TEST_USER_PASSWORD }}"
+        terraform output -json > tf_outputs.json
+
+    - name: Export Terraform Outputs to ENV
+      working-directory: terraform
+      run: |
+        echo "API_URL=$(jq -r '.api_url.value' tf_outputs.json)" >> $GITHUB_ENV
+        echo "CLIENT_ID=$(jq -r '.client_id.value' tf_outputs.json)" >> $GITHUB_ENV
+        echo "USER_POOL_ID=$(jq -r '.user_pool_id.value' tf_outputs.json)" >> $GITHUB_ENV
+
+    - name: Get Cognito Token
+      run: |
+        TOKEN=$(aws cognito-idp admin-initiate-auth \
+        --region eu-west-2 \
+        --user-pool-id $USER_POOL_ID \
+        --client-id $CLIENT_ID \
+        --auth-flow ADMIN_NO_SRP_AUTH \
+        --auth-parameters USERNAME=test-user,PASSWORD=${{ secrets.COGNITO_TEST_USER_PASSWORD }} \
+        --query 'AuthenticationResult.IdToken' --output text)
+        echo "LOGIN_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+    - name: Run E2E Tests
+      working-directory: ./lambda
+      run: poetry run pytest tests/e2e/

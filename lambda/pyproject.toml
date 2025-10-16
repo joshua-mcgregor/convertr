@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "lambda"
+version = "0.1.0"
+description = "Lambda function to upload images to S3 for Convertr take home task"
+authors = [ "Joshua McGregor <joshua.p.mcgregor@gmail.com>" ]
+packages = [{include = "src/*"}]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+boto3 = "^1.40.0"
+pillow = "^12.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.2"
+requests = "^2.32.5"
